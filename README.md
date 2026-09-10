@@ -70,6 +70,7 @@ server/
   src/lib/dates.js   the ONLY place that decides what "today" is
   src/lib/validate.js hand-rolled request validation (stands in for zod)
   src/lib/http.js    HttpError + the async-handler wrapper
+  src/middleware/rate-limit.js  the three layers in front of the credential routes
   src/repos/         the data layer — every user-owned query is scoped by user_id
   src/routes/        JSON API
   scripts/migrate.js the migration runner
@@ -87,6 +88,21 @@ docs/                the static GitHub Pages project page
 **Session cookie, not a JWT in local storage.** The cookie is `HttpOnly`, so no
 JavaScript can read the token, and `SameSite=Lax`. Sessions live in Postgres via
 `connect-pg-simple`, keeping Postgres the only datastore — no Redis.
+
+**Rate limiting in Postgres, not `express-rate-limit`.** Same reasoning as the
+session store: a limit that lives in process memory resets on every deploy, and
+anyone who can make the process restart can clear it. `auth_attempt` holds a
+per-IP volume cap and a per-email failed-login counter with exponential backoff,
+and both survive a restart. In front of them sits a small in-process burst gate
+whose only job is to refuse a flood before it can take a `pg` pool connection —
+best-effort on purpose, since the durable layers are the policy. Only `/auth/login`
+and `/auth/register` are limited; counting `GET /auth/me` would spend the budget
+on ordinary page loads. Tuning knobs are listed in `.env.example`.
+
+**`TRUST_PROXY` is opt-in.** `app.set('trust proxy', …)` is only applied when the
+variable is set, and to the number of proxies actually in front of the app. Set
+it wrong and `req.ip` becomes whatever the caller writes in `X-Forwarded-For`,
+which turns the per-IP limit into a formality.
 
 **Authorization lives in the data layer.** There is deliberately no
 `findPlan(id)`. Every repo function for user-owned data takes the owner's id and

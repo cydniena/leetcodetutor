@@ -8,6 +8,9 @@ import {
   createUser, emailExists, findByEmailWithHash, touchLastLogin, updateTimezone,
 } from '../repos/user.js';
 import { requireAuth } from '../middleware/auth.js';
+import {
+  assertEmailNotInBackoff, clearLoginFailures, limitByIp, recordLoginFailure,
+} from '../middleware/rate-limit.js';
 
 const BCRYPT_ROUNDS = 12;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,6 +44,7 @@ function publicUser(user) {
 
 router.post(
   '/register',
+  limitByIp,
   ah(async (req, res) => {
     const body = parseBody(req, res, {
       ...REGISTER_FIELDS,
@@ -62,9 +66,14 @@ router.post(
 
 router.post(
   '/login',
+  limitByIp,
   ah(async (req, res) => {
     const body = parseBody(req, res, LOGIN_FIELDS);
     if (!body) return;
+
+    // Before the hash, not after: an attempt that is going to be refused must
+    // not cost 200ms of event loop first.
+    await assertEmailNotInBackoff(res, body.email);
 
     const user = await findByEmailWithHash(pool, body.email);
 
@@ -74,8 +83,15 @@ router.post(
     const hash = user?.password_hash ?? '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
     const ok = await bcrypt.compare(body.password, hash);
 
-    if (!user || !ok) throw unauthorized('invalid_credentials');
+    if (!user || !ok) {
+      // Counted against the submitted address whether or not it exists, so the
+      // backoff cannot be used to tell registered emails from unregistered
+      // ones -- the same reason the 401 is identical either way.
+      await recordLoginFailure(body.email);
+      throw unauthorized('invalid_credentials');
+    }
 
+    await clearLoginFailures(body.email);
     await touchLastLogin(pool, user.id);
 
     // Rotate the session id on login so a pre-login cookie cannot be replayed.

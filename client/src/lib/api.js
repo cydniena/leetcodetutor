@@ -21,6 +21,7 @@ export class ApiError extends Error {
       admin_only: 'That area is for admins only.',
       not_found: 'Not found.',
       validation_failed: 'Please check the highlighted fields.',
+      too_many_attempts: 'Too many attempts. Please wait a moment and try again.',
     }[this.code] || 'Something went wrong. Please try again.';
   }
 }

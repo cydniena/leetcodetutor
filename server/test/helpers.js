@@ -13,9 +13,20 @@ let server;
 let baseUrl;
 const createdEmails = new Set();
 
+// These suites make more credential requests in a few seconds than a person
+// makes in a year, so they run with the rate limiter effectively off. The
+// policy itself has its own suite (rate-limit.test.js) which sets a tight one.
+// node --test gives each file its own process, so this cannot leak into it.
+function relaxRateLimits() {
+  process.env.RATE_LIMIT_BURST_MAX = '1000000';
+  process.env.RATE_LIMIT_IP_MAX = '1000000';
+  process.env.RATE_LIMIT_EMAIL_FAILURES = '1000000';
+}
+
 export async function startServer() {
   if (server) return baseUrl;
   process.env.NODE_ENV = 'test';
+  relaxRateLimits();
   server = createApp().listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -28,6 +39,17 @@ export async function stopServer() {
     await pool.query('delete from app_user where email = any($1)', [[...createdEmails]]);
     createdEmails.clear();
   }
+  // Every address a test submits ends in @example.test, including the ones
+  // written inline rather than handed out by testEmail(), so match on the
+  // suffix and leave nothing behind in the counter table.
+  await pool.query("delete from auth_attempt where scope = 'email' and subject like '%@example.test'");
+  // The suite hammers the loopback address with the limiter turned off, so it
+  // leaves a count that would lock the developer out of their own dev server,
+  // which reads the real policy from .env. Clear it.
+  await pool.query(
+    "delete from auth_attempt where scope = 'ip' and subject = any($1)",
+    [['127.0.0.1', '::1', '::ffff:127.0.0.1']],
+  );
   if (server) await new Promise((resolve) => server.close(resolve));
   await pool.end();
 }

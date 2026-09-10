@@ -19,6 +19,7 @@ export const forbidden = (code = 'forbidden') => new HttpError(403, code);
  */
 export const notFound = (code = 'not_found') => new HttpError(404, code);
 export const conflict = (code = 'conflict', extra) => new HttpError(409, code, extra);
+export const tooManyRequests = (code = 'too_many_attempts', extra) => new HttpError(429, code, extra);
 
 /** async handler wrapper */
 export const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);

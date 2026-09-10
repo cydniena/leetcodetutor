@@ -14,7 +14,15 @@ export function createApp() {
   const app = express();
   const isProd = process.env.NODE_ENV === 'production';
 
-  app.set('trust proxy', 1);
+  // Opt-in, and set to the real number of proxies in front of the app.
+  // Unconditional `trust proxy` makes req.ip whatever the client puts in
+  // X-Forwarded-For whenever the app is not actually behind exactly that many
+  // proxies, which would let anyone rotate their apparent address past the
+  // per-IP rate limit at will. Off by default, so local and test runs key on
+  // the real socket address.
+  const trustProxy = Number(process.env.TRUST_PROXY);
+  if (Number.isInteger(trustProxy) && trustProxy > 0) app.set('trust proxy', trustProxy);
+
   app.use(helmet());
   if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
   app.use(express.json({ limit: '64kb' }));
