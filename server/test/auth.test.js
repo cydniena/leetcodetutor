@@ -1,8 +1,10 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import bcrypt from 'bcryptjs';
 import {
   makeClient, pool, registerClient, startServer, stopServer, testEmail,
 } from './helpers.js';
+import { BCRYPT_HASH_RE, DUMMY_HASH } from '../src/routes/auth.js';
 
 before(startServer);
 after(stopServer);
@@ -105,6 +107,23 @@ describe('login and logout', () => {
     // Same code both ways: the response must not reveal whether the account exists.
     assert.equal(wrongPassword.body.error, unknownEmail.body.error);
     assert.equal(wrongPassword.body.error, 'invalid_credentials');
+  });
+
+  // The unknown-email branch compares against DUMMY_HASH to keep its response
+  // time in line with a wrong password. bcryptjs returns false immediately for
+  // a malformed hash, so a typo in the constant silently removes the defence
+  // without failing any status-code assertion -- hence checking it directly.
+  it('compares unknown emails against a real bcrypt hash of the right cost', async () => {
+    assert.equal(DUMMY_HASH.length, 60);
+    assert.match(DUMMY_HASH, BCRYPT_HASH_RE);
+    // Same cost as registration, or the two branches still differ in time.
+    assert.equal(bcrypt.getRounds(DUMMY_HASH), 12);
+    // bcryptjs only does key derivation for a hash it can parse; a malformed
+    // one short-circuits to false, so this proves the comparison runs.
+    const start = process.hrtime.bigint();
+    assert.equal(await bcrypt.compare('any-password', DUMMY_HASH), false);
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
+    assert.ok(ms > 20, `comparing against DUMMY_HASH took ${ms.toFixed(1)}ms; expected a real derivation`);
   });
 
   it('does not apply the password policy at login', async () => {

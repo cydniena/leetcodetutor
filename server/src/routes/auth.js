@@ -21,6 +21,19 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // password is always 401.
 const PASSWORD_POLICY = { required: true, min: 8, max: 200, trim: false };
 
+// A real bcrypt hash at BCRYPT_ROUNDS, compared against when the email is
+// unknown so that branch costs a full key derivation. It MUST stay a valid
+// 60-char hash: bcryptjs rejects a malformed one and returns false in ~0ms,
+// which turns login timing back into an account-enumeration oracle. Generated
+// once with bcrypt.hashSync(crypto.randomUUID(), BCRYPT_ROUNDS); the plaintext
+// was never recorded, so no password can match it.
+export const DUMMY_HASH = '$2a$12$Tlhqx2FwXIgn.Wa/Cs/uj.3PjPfd9RwRfcQwHCpQTTfb2gQ1RI1fK';
+export const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+
+if (!BCRYPT_HASH_RE.test(DUMMY_HASH)) {
+  throw new Error('DUMMY_HASH is not a valid bcrypt hash; login timing defence would be a no-op');
+}
+
 const REGISTER_FIELDS = {
   email: f.str({ required: true, max: 254, pattern: EMAIL_RE, message: 'email is not valid' }),
   password: f.str(PASSWORD_POLICY),
@@ -85,7 +98,7 @@ router.post(
     // Compare against a dummy hash when the email is unknown so a wrong email
     // and a wrong password take the same time. Cheap defence against using
     // response timing to enumerate accounts.
-    const hash = user?.password_hash ?? '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
+    const hash = user?.password_hash ?? DUMMY_HASH;
     const ok = await bcrypt.compare(body.password, hash);
 
     if (!user || !ok) throw unauthorized('invalid_credentials');
