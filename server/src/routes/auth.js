@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { f, parseBody } from '../lib/validate.js';
 import { ah, conflict, unauthorized } from '../lib/http.js';
+import { destroySession, regenerateSession, saveSession } from '../lib/session.js';
 import { isValidTimezone, todayFor } from '../lib/dates.js';
 import {
   createUser, emailExists, findByEmailWithHash, touchLastLogin, updateTimezone,
@@ -56,6 +57,7 @@ router.post(
     const user = await createUser(pool, { email: body.email, passwordHash, timezone });
 
     req.session.userId = user.id;
+    await saveSession(req.session);
     res.status(201).json({ user: publicUser(user) });
   }),
 );
@@ -79,20 +81,26 @@ router.post(
     await touchLastLogin(pool, user.id);
 
     // Rotate the session id on login so a pre-login cookie cannot be replayed.
-    req.session.regenerate((err) => {
-      if (err) throw err;
-      req.session.userId = user.id;
-      res.json({ user: publicUser(user) });
-    });
+    // Awaited rather than callback-based: see lib/session.js for why a throw
+    // from inside regenerate's callback used to kill the process.
+    await regenerateSession(req.session);
+    req.session.userId = user.id;
+    await saveSession(req.session);
+    res.json({ user: publicUser(user) });
   }),
 );
 
-router.post('/logout', (req, res) => {
-  req.session.destroy(() => {
+router.post(
+  '/logout',
+  ah(async (req, res) => {
+    // If the store cannot drop the record the session is still live, so the
+    // cookie stays put and the caller gets a 500 it can retry. Clearing the
+    // cookie here would report success while leaving the session usable.
+    await destroySession(req.session);
     res.clearCookie('sid');
     res.status(204).end();
-  });
-});
+  }),
+);
 
 router.get('/me', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'login_required' });
