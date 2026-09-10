@@ -407,6 +407,34 @@ describe('headlineComparison', () => {
     assert.equal(out.app.deep_hint_share, 0, 'a level-1 hint is not a deep hint');
   });
 
+  it('keeps the deep-hint share a share when a give-up reached a deep hint', async () => {
+    await reset();
+    // Regression: the numerator counted every attempt at hint level 2+ while
+    // the denominator counted solves only, so a give-up that burned through
+    // the hints inflated the share above 1. One give-up at hint 3 plus one
+    // hinted solve at hint 2 reported 2 -- a 200% share.
+    await attempt({ on: '2026-01-01', outcome: 'gave_up', hint: 3, baseline: true });
+    await attempt({ on: '2026-01-02', outcome: 'solved_with_hint', hint: 2, baseline: true });
+
+    const out = await headlineComparison(pool, me);
+    assert.equal(out.baseline.attempts, 2, 'a give-up is still an attempt');
+    assert.equal(out.baseline.deep_hint_share, 1, 'one deep-hinted solve out of one solve');
+  });
+
+  it('counts a give-up in attempts but in neither side of the hint share', async () => {
+    await reset();
+    // Two clean solves and a give-up at hint 3: the give-up must not appear in
+    // the numerator, so the share stays 0 rather than becoming 1/2.
+    await attempt({ on: '2026-01-01', outcome: 'solved_clean', baseline: true });
+    await attempt({ on: '2026-01-02', outcome: 'solved_clean', baseline: true });
+    await attempt({ on: '2026-01-03', outcome: 'gave_up', hint: 3, baseline: true });
+
+    const out = await headlineComparison(pool, me);
+    assert.equal(out.baseline.attempts, 3);
+    assert.equal(out.baseline.clean_rate, 0.667, 'clean rate is over all attempts');
+    assert.equal(out.baseline.deep_hint_share, 0, 'no solve needed a deep hint');
+  });
+
   it('reports no deep-hint share when every attempt was a give-up', async () => {
     await reset();
     await attempt({ on: '2026-01-01', outcome: 'gave_up', hint: 3, baseline: true });
