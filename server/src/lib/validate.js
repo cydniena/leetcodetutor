@@ -12,6 +12,18 @@
 
 const MISSING = Symbol('missing');
 
+// Only a number or a string can be a scalar the client meant as one.
+//
+// The scalar coercions below fall back to Number(String(raw)), and String() on
+// a container produces something Number() is happy to accept: String([]) is ''
+// which becomes 0, and String(['7']) is '7' which becomes 7. So without this
+// guard `{"minutes": []}` validates as the number 0 -- the validator invents a
+// value the caller never sent, and whatever rejects it next (a CHECK
+// constraint, say) reports a server error rather than bad input.
+function isScalar(raw) {
+  return typeof raw === 'number' || typeof raw === 'string';
+}
+
 function base(opts, coerce) {
   return (raw, field) => {
     const absent = raw === undefined || raw === null || raw === '';
@@ -41,6 +53,7 @@ export const f = {
 
   int: (opts = {}) =>
     base(opts, (raw, field) => {
+      if (!isScalar(raw)) return { error: `${field} must be a whole number` };
       const value = typeof raw === 'number' ? raw : Number(String(raw).trim());
       if (!Number.isInteger(value)) return { error: `${field} must be a whole number` };
       if (opts.min !== undefined && value < opts.min)
@@ -52,6 +65,7 @@ export const f = {
 
   num: (opts = {}) =>
     base(opts, (raw, field) => {
+      if (!isScalar(raw)) return { error: `${field} must be a number` };
       const value = typeof raw === 'number' ? raw : Number(String(raw).trim());
       if (!Number.isFinite(value)) return { error: `${field} must be a number` };
       if (opts.min !== undefined && value < opts.min)
@@ -91,9 +105,13 @@ export const f = {
   // Array of positive integers, e.g. pattern_ids on an attempt.
   intArray: (opts = {}) =>
     base(opts, (raw, field) => {
+      // A bare scalar is a one-element list, and a string may be '1,2,3' from a
+      // query string. Anything else is not a list, whatever String() makes of it.
+      if (!Array.isArray(raw) && !isScalar(raw)) return { error: `${field} must be a list of ids` };
       const arr = Array.isArray(raw) ? raw : String(raw).split(',');
       const out = [];
       for (const item of arr) {
+        if (!isScalar(item)) return { error: `${field} must be a list of ids` };
         const n = typeof item === 'number' ? item : Number(String(item).trim());
         if (!Number.isInteger(n) || n < 1) return { error: `${field} must be a list of ids` };
         out.push(n);
