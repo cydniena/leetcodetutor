@@ -33,10 +33,22 @@ Requires Node 20+ and Docker.
 ```bash
 npm run install:all     # root, server and client dependencies
 cp .env.example .env    # already done if you cloned with the file present
-npm run db:up           # Postgres 16 in Docker on host port 5433
+
+# SESSION_SECRET signs the session cookie, so it has to be yours:
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+# ...paste the output into SESSION_SECRET= in .env
+
+npm run db:up           # Postgres 16 in Docker on 127.0.0.1:5433
 npm run migrate         # apply migrations/*.sql in order
 npm run seed            # catalog + two users + 12 weeks of demo history
 ```
+
+Without a real `SESSION_SECRET` the server still starts in development, but it
+signs cookies with a random secret it throws away on restart — so you are
+logged out on every reload, and it says so in the log. In production
+(`NODE_ENV=production`) a missing or placeholder secret is a startup error
+instead: a signing key that anyone can read in the repository is worse than no
+boot at all.
 
 Then, in two terminals:
 
@@ -70,6 +82,7 @@ server/
   src/lib/dates.js   the ONLY place that decides what "today" is
   src/lib/validate.js hand-rolled request validation (stands in for zod)
   src/lib/http.js    HttpError + the async-handler wrapper
+  src/lib/session-secret.js  fail fast on a missing/placeholder SESSION_SECRET
   src/repos/         the data layer — every user-owned query is scoped by user_id
   src/routes/        JSON API
   scripts/migrate.js the migration runner
