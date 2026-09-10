@@ -153,6 +153,9 @@ button.ghost {
 }
 button.ghost:hover { color: var(--text); }
 
+/* Error and info alerts sit in the same box and differ in hue, so each carries
+   a glyph too -- state is never signalled by colour alone. The variation
+   selector keeps them as text rather than emoji. */
 .alert {
   margin: 0.5rem 0 0;
   padding: 0.55rem 0.7rem;
@@ -161,9 +164,15 @@ button.ghost:hover { color: var(--text); }
   color: var(--danger);
   font-size: 0.9rem;
 }
+.alert::before { content: '\26A0\FE0E'; margin-right: 0.45rem; font-weight: 700; }
 .alert.info { background: var(--accent-soft); color: var(--accent); }
+.alert.info::before { content: '\2139\FE0E'; }
+
+/* The form-level alert takes focus after a failed submit, so it needs a ring. */
+.alert:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
 .field-error { color: var(--danger); font-size: 0.82rem; }
+input[aria-invalid='true'] { border-color: var(--danger); }
 .seed-hint { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.4rem; }
 
 .kv {
