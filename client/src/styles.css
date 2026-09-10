@@ -1,0 +1,181 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c1f24;
+  --muted: #6b7280;
+  --accent: #2b5fd9;
+  --accent-soft: #eaf0ff;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --radius: 10px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2c3238;
+    --text: #e8eaed;
+    --muted: #9aa3ad;
+    --accent: #7aa2ff;
+    --accent-soft: #1f2a44;
+    --danger: #ff9c94;
+    --danger-soft: #3a1f1d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--accent-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+h1 { font-size: 1.4rem; margin: 0 0 0.35rem; }
+h2 { font-size: 1.1rem; margin: 0 0 0.35rem; }
+
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+
+/* --- layout --------------------------------------------------------------- */
+.app { min-height: 100vh; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.brand { font-weight: 650; letter-spacing: -0.01em; }
+
+.topbar nav { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+
+.topbar nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 7px;
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+.topbar nav a:hover { background: var(--bg); color: var(--text); }
+.topbar nav a.active { background: var(--accent-soft); color: var(--accent); }
+
+.badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.05rem 0.32rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--muted);
+}
+
+.who { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.boot { padding: 3rem; text-align: center; color: var(--muted); }
+
+/* --- pieces --------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+.auth-card { width: 100%; max-width: 380px; display: grid; gap: 0.4rem; }
+.auth-card h1 { margin-bottom: 0; }
+.auth-card p:first-of-type { margin-top: 0; }
+
+label { font-size: 0.86rem; font-weight: 550; margin-top: 0.5rem; }
+
+input {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+button {
+  font: inherit;
+  font-weight: 550;
+  margin-top: 0.85rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: progress; }
+button.ghost {
+  margin: 0;
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+}
+button.ghost:hover { color: var(--text); }
+
+.alert {
+  margin: 0.5rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 7px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+.alert.info { background: var(--accent-soft); color: var(--accent); }
+
+.field-error { color: var(--danger); font-size: 0.82rem; }
+.seed-hint { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.4rem; }
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1.25rem;
+  margin: 0.9rem 0 0;
+}
+.kv dt { color: var(--muted); font-size: 0.86rem; }
+.kv dd { margin: 0; }
+
+.checks { margin: 0.6rem 0; padding-left: 1.1rem; }
+.checks li { margin-bottom: 0.25rem; }
+
+a { color: var(--accent); }

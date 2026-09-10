@@ -1,0 +1,19 @@
+{
+  "name": "leetcodetutor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LeetCode study tracker and tutor",
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d --wait && npm run migrate && npm run seed",
+    "migrate": "node --env-file=.env server/scripts/migrate.js",
+    "seed": "node --env-file=.env server/scripts/seed.js",
+    "dev:server": "node --env-file=.env --watch server/src/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "test": "node --env-file=.env --test server/test/*.test.js",
+    "export:analytics": "node --env-file=.env server/scripts/export-analytics.js",
+    "docs:build": "npm run export:analytics"
+  }
+}

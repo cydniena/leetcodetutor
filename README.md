@@ -1,0 +1,142 @@
+# LeetCode Tutor
+
+A study tracker for coding-interview prep. A CRUD app with basic analytics —
+deliberately not an AI tutor, not a code judge, and not a LeetCode scraper.
+
+Hints and explainers are **content you author and store as rows**. The app's job
+is to store, schedule and reveal them in order.
+
+## Why
+
+People solve problems in a scattered way: no record of attempts, no organisation
+by pattern, no sequencing, no review. The cost is weeks of study with nothing
+measurable to show and failed interviews that can't be diagnosed.
+
+The app is working if three numbers move:
+
+1. **Time-to-solve** at a given difficulty goes down
+2. **Hint dependency** — the share of solves needing hint level 2+ — goes down
+3. **Retention** — repeat attempts on old problems stay strong instead of decaying
+
+The schema exists to make those three computable. Log ~15 attempts by hand first
+(`is_baseline = true`) so there is something to compare against.
+
+## Running it
+
+Requires Node 20+ and Docker.
+
+```bash
+npm run install:all     # root, server and client dependencies
+cp .env.example .env    # already done if you cloned with the file present
+npm run db:up           # Postgres 16 in Docker on host port 5433
+npm run migrate         # apply migrations/*.sql in order
+npm run seed            # catalog + two users + 12 weeks of demo history
+```
+
+Then, in two terminals:
+
+```bash
+npm run dev:server      # API on http://localhost:4000
+npm run dev:client      # UI  on http://localhost:5173
+```
+
+Open <http://localhost:5173>. Seeded accounts, both with password `password123`:
+
+| Email                  | Role    | Has data |
+| ---------------------- | ------- | -------- |
+| `learner@example.com`  | learner | yes — 43 attempts, 3 plans, 8 reviews, 8 notes |
+| `admin@example.com`    | admin   | no — for catalog editing |
+
+Other scripts:
+
+```bash
+npm test                # ownership + auth suite (node:test, no test deps)
+npm run db:reset        # wipe the volume, migrate, reseed
+npm run db:down         # stop Postgres
+```
+
+## Layout
+
+```
+migrations/          plain SQL, applied in filename order, tracked in schema_migration
+server/
+  src/db.js          the pg pool, type parsers, tx() helper
+  src/lib/dates.js   the ONLY place that decides what "today" is
+  src/lib/validate.js hand-rolled request validation (stands in for zod)
+  src/lib/http.js    HttpError + the async-handler wrapper
+  src/repos/         the data layer — every user-owned query is scoped by user_id
+  src/routes/        JSON API
+  scripts/migrate.js the migration runner
+  scripts/seed.js    catalog + synthetic history with a real improving trend
+  test/              node:test suites, zero test dependencies
+client/              React on Vite, talks to the API over /api
+```
+
+## Decisions worth knowing
+
+**Session cookie, not a JWT in local storage.** The cookie is `HttpOnly`, so no
+JavaScript can read the token, and `SameSite=Lax`. Sessions live in Postgres via
+`connect-pg-simple`, keeping Postgres the only datastore — no Redis.
+
+**Authorization lives in the data layer.** There is deliberately no
+`findPlan(id)`. Every repo function for user-owned data takes the owner's id and
+puts it in the `WHERE` clause, so a missing row and a row you don't own are
+indistinguishable — the API returns 404 for both and never reveals which ids
+exist. The route guards in the React app are convenience only.
+`server/test/ownership.test.js` asserts this, and each phase adds its resource
+to that file.
+
+**Attempts tag the pattern you actually used.** `attempt_pattern` is populated at
+log time, prefilled from the problem's tags. The mastery grid counts that table,
+so it measures technique practised rather than technique intended — including
+the case where you solved a two-pointer problem with a hash map. Note the table
+has no `user_id`: ownership reaches it only through a join to `attempt`.
+
+**Per-user timezone.** `app_user.timezone` decides when "due today" flips.
+Nothing may call `current_date` directly; everything routes through
+`server/src/lib/dates.js`.
+
+**Raw SQL, no ORM.** The interesting parts of this project are the joins and the
+window function behind the retention metric. An ORM would hide exactly those.
+The cost is hand-written row mapping.
+
+**Hand-rolled validation and data fetching.** `zod` and `react-query` were
+considered and declined to keep the dependency list to a query layer, a password
+hasher, a session store, a router and a chart library. `server/src/lib/validate.js`
+and `client/src/lib/useApi.js` are the replacements. If a page ever needs to
+invalidate another page's data after a mutation, revisit `useApi` rather than
+working around it.
+
+**`bcryptjs`, not `bcrypt`.** Pure JavaScript, so no native compilation step.
+Same algorithm at cost 12, roughly 3× slower to hash — irrelevant at login
+volumes of one. `argon2id` would be the better modern primitive if this ever had
+real users.
+
+**Password policy applies at registration only.** Login validates that a
+password is present, nothing more. Enforcing a minimum length at login would
+leak the policy through the status code and would lock out existing accounts the
+day the policy is tightened.
+
+**`qs` override.** Express 4.22.2 pins a `qs` version with a moderate DoS
+advisory; `server/package.json` overrides it to `^6.16.0`, which is
+API-compatible. Both `npm audit`s report zero vulnerabilities.
+
+## Phases
+
+| # | Slice | Status |
+|---|-------|--------|
+| 0 | Skeleton, Docker Postgres, migration runner, catalog + seed | **done** |
+| 1 | Auth: register / login / logout / me, roles, ownership tests | **done** |
+| 2 | Catalog read, problem browser, hint reveal, notes CRUD | next |
+| 3 | Attempts CRUD, logging form, history | |
+| 4 | Plans and plan items, reorder, reschedule | |
+| 5 | Goals, reviews (1/3/7/21 ladder), today's queue, dashboard | |
+| 6 | Analytics — the six queries | |
+| 7 | Admin catalog CRUD | |
+
+The nav bar shows a small number next to routes that aren't built yet, so the app
+never pretends to have a page it doesn't have.
+
+Known gap for phase 7 to fill: the catalog has eight patterns, and
+*opposite-ends two pointers* (Valid Palindrome, 3Sum, Container With Most Water)
+is the obvious ninth. Adding it is the admin surface's first real job.

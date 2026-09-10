@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetCode Tutor — a study tracker that measures whether it worked</title>
+<meta name="description" content="A LeetCode study tracker and tutor: Express, React and Postgres. Built so that three numbers — time-to-solve, hint dependency and retention — can actually be computed.">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' font-size='26'>📉</text></svg>">
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Express · React · Postgres</p>
+    <h1>LeetCode Tutor</h1>
+    <p class="lede">
+      A study tracker for coding-interview prep, built around a single question:
+      <em>am I actually getting better?</em> Deliberately not an AI tutor, not a
+      code judge, and not a LeetCode scraper.
+    </p>
+    <div class="hero-links">
+      <a href="https://github.com/cydniena/leetcodetutor">Source on GitHub</a>
+      <a href="#numbers">The three numbers</a>
+      <a href="#schema">Schema</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#phases">Build status</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <p class="notice">
+    <strong>This page is static.</strong> The app is an Express API with a
+    Postgres database and session cookies, so it cannot run on GitHub Pages —
+    there is no server here and nothing to log in to. The charts below are real
+    output from the six analytics queries, run against the
+    <strong>seeded demo history</strong> that ships with the repo
+    (<code>server/scripts/seed.js</code>). They are not one person's real study
+    record. To use it for real, clone the repo and run it locally.
+  </p>
+
+  <!-- ------------------------------------------------------------- why -- -->
+  <section id="why">
+    <h2>Why this exists</h2>
+    <p class="sub">
+      Every feature in the app has to trace back to one of these four points. If
+      a feature serves none of them, it doesn't get built.
+    </p>
+    <div class="grid-2">
+      <div class="card">
+        <p class="eyebrow">Clarity — what is the problem?</p>
+        <p style="margin:0;font-size:0.93rem">
+          People prepare in a scattered way: they pick problems at random, solve
+          the ones they already recognise, and keep no record of what they
+          attempted or why an attempt failed. Faced with an unfamiliar medium,
+          they can't tell which technique applies — because they learned problems
+          as one-offs rather than as members of a pattern.
+        </p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Consequence — what does it cost?</p>
+        <p style="margin:0;font-size:0.93rem">
+          Weeks of study with nothing measurable to show, and failed interviews
+          the person can't diagnose. Concretely: hours re-solving things already
+          known while the real weak spots go untouched, and no way to answer
+          “am I better than I was last month?”
+        </p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Cause — why does it happen?</p>
+        <ul class="plain" style="margin-top:0">
+          <li><b>No record</b> of attempts, so no feedback loop exists</li>
+          <li><b>No organisation by pattern</b>, so recognition never develops</li>
+          <li><b>No sequencing</b> — problems attempted before their prerequisites are solid</li>
+          <li><b>No review</b>, so solved material decays and gets re-learned</li>
+        </ul>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Confirmation — how would we know it helped?</p>
+        <p style="margin:0;font-size:0.93rem">
+          Log 15 attempts by hand first. That's the baseline. The app works if
+          time-to-solve falls, the share of solves needing a hint falls, and
+          repeat attempts on old problems hold up instead of degrading.
+          <b>If those three numbers don't move, the app failed</b> — and the
+          schema exists to make them computable.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- numbers -- -->
+  <section id="numbers">
+    <h2>The three numbers</h2>
+    <p class="sub">
+      Hand-logged baseline attempts versus everything logged since. This is the
+      comparison the whole project is judged on.
+    </p>
+    <div class="tiles" id="tiles"></div>
+    <p class="caveat" id="tiles-caveat"></p>
+  </section>
+
+  <!-- ---------------------------------------------------------- charts -- -->
+  <section id="charts">
+    <h2>What the analytics actually show</h2>
+    <p class="sub">
+      Six queries over the app's own tables — no warehouse, no event pipeline.
+      Each chart here is the unmodified result of one of them.
+    </p>
+
+    <div class="chart-block">
+      <div class="chart-head">
+        <h3>Time-to-solve, by difficulty, by week</h3>
+        <p class="sub" style="margin:0.15rem 0 0">
+          Average minutes on solved attempts. Give-ups are excluded — they'd
+          measure persistence, not speed.
+        </p>
+        <div class="legend" id="tts-legend"></div>
+      </div>
+      <div id="chart-tts"></div>
+      <p class="caveat" id="tts-caveat"></p>
+      <div id="tts-table"></div>
+    </div>
+
+    <div class="chart-block">
+      <div class="chart-head">
+        <h3>Hint dependency: share of solves needing hint level 2 or deeper</h3>
+        <p class="sub" style="margin:0.15rem 0 0">
+          Hints are a ladder of three, authored by hand per pattern. Needing the
+          deep ones means the pattern hasn't landed yet. A database constraint
+          keeps this honest: a “clean” solve cannot carry a hint, and a hinted
+          solve must carry at least one.
+        </p>
+      </div>
+      <div id="chart-hint"></div>
+      <div id="hint-table"></div>
+    </div>
+
+    <div class="chart-block">
+      <div class="chart-head">
+        <h3>Retention: how repeat attempts hold up as the gap grows</h3>
+        <p class="sub" style="margin:0.15rem 0 0">
+          Clean-solve rate on second-and-later attempts at the same problem,
+          bucketed by days since the previous attempt. Both the gap and the
+          previous outcome come from a window function over
+          <code>attempt</code> — no extra column needed.
+        </p>
+      </div>
+      <div id="chart-retention"></div>
+      <p class="caveat" id="retention-caveat"></p>
+      <div id="retention-table"></div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- mastery -- -->
+  <section id="mastery">
+    <h2>Mastery grid</h2>
+    <p class="sub">
+      Per pattern: attempts, clean-solve rate, last attempted. Patterns with
+      <b>zero</b> attempts still appear — those rows are the untouched weak
+      spots, which is the entire point. The grid counts
+      <code>attempt_pattern</code>, the pattern you say you actually used, not
+      the problem's tags — so it measures technique practised rather than
+      technique intended.
+    </p>
+    <div class="card">
+      <div class="table-scroll" id="mastery-table"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- today/plan -- -->
+  <section id="today">
+    <h2>Today, and plan adherence</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>What to do today</h3>
+        <p class="sub" style="margin:0.2rem 0 0.75rem">
+          Overdue plan items plus reviews that have come due. Day boundaries use
+          the user's own timezone, never the server's.
+        </p>
+        <ul class="queue" id="queue"></ul>
+      </div>
+      <div class="card">
+        <h3>Plan adherence</h3>
+        <p class="sub" style="margin:0.2rem 0 0.75rem">
+          Of the items whose target date has passed, how many were finished on
+          time rather than late or skipped.
+        </p>
+        <div class="table-scroll" id="adherence-table"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- schema -- -->
+  <section id="schema">
+    <h2>The schema</h2>
+    <p class="sub">
+      Sixteen tables. Reference data is seeded and admin-editable; everything
+      else belongs to a user and is scoped by <code>user_id</code> in the data
+      layer.
+    </p>
+    <div class="grid-2">
+      <div class="card">
+        <p class="eyebrow">Reference — read-only for learners</p>
+        <ul class="plain" style="margin-top:0">
+          <li><b>topic</b> — with a self-referencing prerequisite relation</li>
+          <li><b>pattern</b> — finer-grained than topic; carries the explainer</li>
+          <li><b>pattern_hint</b> — the graduated ladder, levels 1–3</li>
+          <li><b>problem</b> — title, difficulty, URL. <b>Metadata and a link only, never the problem text</b></li>
+          <li><b>problem_pattern</b> — many-to-many, with one primary pattern</li>
+        </ul>
+      </div>
+      <div class="card">
+        <p class="eyebrow">User-owned — the CRUD surface</p>
+        <ul class="plain" style="margin-top:0">
+          <li><b>attempt</b> — minutes, outcome, hint level, confidence, reflection</li>
+          <li><b>attempt_pattern</b> — the pattern you actually used</li>
+          <li><b>plan</b> / <b>plan_item</b> — reorderable, reschedulable</li>
+          <li><b>goal</b> / <b>goal_topic</b> — target date, hours, focus topics</li>
+          <li><b>review</b> — spaced repetition on a fixed 1 / 3 / 7 / 21 ladder</li>
+          <li><b>note</b> — attached to a problem <em>or</em> a pattern, never both</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <p class="eyebrow">Three constraints doing real work</p>
+      <ul class="plain" style="margin-top:0">
+        <li><code>attempt_hint_matches_outcome</code> — a clean solve must have hint level 0, a hinted solve at least 1. Keeps the hint-dependency metric from drifting at the database level rather than by convention.</li>
+        <li><code>note_exactly_one_parent</code> — <code>(problem_id is not null) &lt;&gt; (pattern_id is not null)</code>. One table for notes, not two, without allowing an orphan or a note attached to both.</li>
+        <li><code>plan_item_completed_at_matches_status</code> — <code>(status = 'done') = (completed_at is not null)</code>. Makes “done on time” answerable, since a completion can't exist without its date.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- decisions -- -->
+  <section id="decisions">
+    <h2>Decisions worth explaining</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Authorization lives in the data layer</h3>
+        <p style="margin:0.3rem 0 0;font-size:0.92rem">
+          There is deliberately no <code>findPlan(id)</code>. Every repository
+          function for user-owned data takes the owner's id and puts it in the
+          <code>WHERE</code> clause, so a missing row and a row you don't own are
+          indistinguishable — both return 404, and the API never reveals which
+          ids exist. The React route guards are convenience only.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Session cookie, not a JWT in local storage</h3>
+        <p style="margin:0.3rem 0 0;font-size:0.92rem">
+          <code>HttpOnly</code>, so no JavaScript can read the token, and
+          <code>SameSite=Lax</code>. Sessions live in Postgres, which keeps
+          Postgres the only datastore — no Redis to run.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Raw SQL, no ORM</h3>
+        <p style="margin:0.3rem 0 0;font-size:0.92rem">
+          The interesting parts of this project are the joins and the window
+          function behind the retention metric. An ORM would hide exactly those.
+          The cost is hand-written row mapping, paid willingly.
+        </p>
+      </div>
+      <div class="card">
+        <h3>One place decides what “today” is</h3>
+        <p style="margin:0.3rem 0 0;font-size:0.92rem">
+          Day boundaries are a per-user question, so
+          <code>app_user.timezone</code> drives them and nothing in the codebase
+          may call <code>current_date</code>. Every “is this due?” routes through
+          a single module.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Attempts tag the pattern you used</h3>
+        <p style="margin:0.3rem 0 0;font-size:0.92rem">
+          Prefilled from the problem's tags, then corrected by hand. It costs one
+          extra table and one click per log, and it buys a mastery grid that
+          notices when you solved a two-pointer problem with a hash map.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Explicitly out of scope</h3>
+        <p style="margin:0.3rem 0 0;font-size:0.92rem">
+          No LLM calls, no generated hints, no sandboxed code execution, no
+          scraping. Hints and explainers are content authored by hand and stored
+          as rows; the app stores, schedules and reveals them in order — nothing
+          cleverer.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- phases -- -->
+  <section id="phases">
+    <h2>Build status</h2>
+    <p class="sub">
+      Built in vertical slices — migration, then data layer, then routes, then
+      UI, then seed — so there is something runnable at the end of each.
+    </p>
+    <div class="card">
+      <ul class="phase-list">
+        <li><span class="phase-no">0</span> Skeleton, Docker Postgres, migration runner, catalog and seed <span class="state done">done</span></li>
+        <li><span class="phase-no">1</span> Auth — register, login, logout, roles, ownership tests <span class="state done">done</span></li>
+        <li><span class="phase-no">2</span> Catalog reads, problem browser, progressive hint reveal, notes CRUD <span class="state todo">next</span></li>
+        <li><span class="phase-no">3</span> Attempts CRUD, logging form, history <span class="state todo">to do</span></li>
+        <li><span class="phase-no">4</span> Plans and plan items — reorder, reschedule <span class="state todo">to do</span></li>
+        <li><span class="phase-no">5</span> Goals, reviews, today's queue, dashboard <span class="state todo">to do</span></li>
+        <li><span class="phase-no">6</span> Analytics pages <span class="state todo">to do</span></li>
+        <li><span class="phase-no">7</span> Admin catalog CRUD <span class="state todo">to do</span></li>
+      </ul>
+      <p class="caveat">
+        The analytics queries themselves already exist and are what this page
+        renders — phase 6 adds the routes and the in-app charts on top of them,
+        rather than rewriting the SQL.
+      </p>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- running -- -->
+  <section id="running">
+    <h2>Running it</h2>
+    <div class="card">
+      <p class="sub" style="margin-top:0">Requires Node 20+ and Docker.</p>
+<pre style="overflow-x:auto;margin:0"><code>git clone https://github.com/cydniena/leetcodetutor
+cd leetcodetutor
+npm run install:all
+cp .env.example .env
+npm run db:up        # Postgres 16 in Docker, host port 5433
+npm run migrate      # apply migrations/*.sql in order
+npm run seed         # catalog + 2 users + 12 weeks of demo history
+npm run dev:server   # API on :4000
+npm run dev:client   # UI  on :5173</code></pre>
+      <p class="caveat">
+        Seeded logins, both with password <code>password123</code>:
+        <code>learner@example.com</code> (has the demo history) and
+        <code>admin@example.com</code> (for catalog editing).
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <a href="https://github.com/cydniena/leetcodetutor">github.com/cydniena/leetcodetutor</a>
+      — charts generated from seeded data by
+      <code>npm run export:analytics</code>.
+      <span id="generated"></span>
+    </p>
+  </footer>
+</div>
+
+<script src="data/analytics.js"></script>
+<script type="module" src="assets/main.js"></script>
+</body>
+</html>
