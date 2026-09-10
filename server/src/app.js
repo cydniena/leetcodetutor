@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { pool } from './db.js';
 import { attachUser } from './middleware/auth.js';
 import { HttpError } from './lib/http.js';
+import { resolveSessionSecret } from './lib/session-secret.js';
 import authRoutes from './routes/auth.js';
 
 const PgStore = connectPgSimple(session);
@@ -13,6 +14,11 @@ const PgStore = connectPgSimple(session);
 export function createApp() {
   const app = express();
   const isProd = process.env.NODE_ENV === 'production';
+
+  // Throws in production rather than falling back to a guessable secret; in
+  // development it returns a per-process random one and tells us it did.
+  const { secret: sessionSecret, warning } = resolveSessionSecret();
+  if (warning && process.env.NODE_ENV !== 'test') console.warn(`WARNING: ${warning}`);
 
   app.set('trust proxy', 1);
   app.use(helmet());
@@ -40,7 +46,7 @@ export function createApp() {
     session({
       name: 'sid',
       store: new PgStore({ pool, tableName: 'user_session', createTableIfMissing: false }),
-      secret: process.env.SESSION_SECRET || 'dev-only-insecure-secret',
+      secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
       rolling: true,
