@@ -183,7 +183,13 @@ export async function headlineComparison(db, userId) {
             round(avg(minutes_spent)::numeric, 1) as avg_minutes,
             round(count(*) filter (where outcome = 'solved_clean')::numeric
                   / count(*), 3) as clean_rate,
-            round(count(*) filter (where max_hint_level >= 2)::numeric
+            -- Both halves must exclude give-ups. The denominator is solves,
+            -- so counting a give-up's hint level in the numerator lets the
+            -- share exceed 1. hintDependencyByWeek gets this for free from its
+            -- WHERE clause; here the other aggregates need every attempt, so
+            -- each one carries its own filter.
+            round(count(*) filter (
+                    where max_hint_level >= 2 and outcome <> 'gave_up')::numeric
                   / nullif(count(*) filter (where outcome <> 'gave_up'), 0), 3)
               as deep_hint_share
        from attempt
