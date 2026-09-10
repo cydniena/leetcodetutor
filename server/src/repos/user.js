@@ -50,3 +50,34 @@ export async function updateTimezone(db, userId, timezone) {
   );
   return rows[0] ?? null;
 }
+
+/** Includes password_hash -- only for re-verifying the current password. */
+export async function findByIdWithHash(db, id) {
+  const { rows } = await db.query(
+    `select ${COLUMNS}, password_hash from app_user where id = $1`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+export async function updatePasswordHash(db, userId, passwordHash) {
+  const { rows } = await db.query(
+    `update app_user set password_hash = $2 where id = $1 returning ${COLUMNS}`,
+    [userId, passwordHash],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Signs the user out everywhere except the caller. Sessions are rows in
+ * user_session with the user id inside the `sess` json, so this is the only
+ * way to reach them -- express-session's store API has no "by user" lookup.
+ * `sess->>'userId'` is text; the id is a number, hence the cast.
+ */
+export async function deleteOtherSessions(db, userId, keepSid) {
+  const { rowCount } = await db.query(
+    `delete from user_session where sess->>'userId' = $1::text and sid <> $2`,
+    [userId, keepSid ?? ''],
+  );
+  return rowCount;
+}

@@ -5,6 +5,7 @@ import Placeholder from './components/Placeholder.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
+import Settings from './pages/Settings.jsx';
 
 /**
  * Route guard. This is convenience, not security -- it only decides what to
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="attempts"  element={<Placeholder title="Attempts"  phase={3} />} />
           <Route path="plans"     element={<Placeholder title="Plans"     phase={4} />} />
           <Route path="analytics" element={<Placeholder title="Analytics" phase={6} />} />
+          <Route path="settings"  element={<Settings />} />
           <Route path="admin" element={<RequireAdmin><Placeholder title="Admin catalog" phase={7} /></RequireAdmin>} />
         </Route>
 

@@ -175,6 +175,23 @@ button.ghost:hover { color: var(--text); }
 input[aria-invalid='true'] { border-color: var(--danger); }
 .seed-hint { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.4rem; }
 
+/* The email in the top bar is the way into settings. Styled like the nav
+   links, but it lives outside <nav> so it needs its own rules. */
+.who a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: 7px;
+  font-weight: 500;
+}
+.who a:hover { background: var(--bg); color: var(--text); }
+.who a.active { background: var(--accent-soft); color: var(--accent); }
+
+/* Same stacked-label form as the auth cards, kept narrow at page width. */
+.settings-form { display: grid; gap: 0.4rem; max-width: 420px; }
+.settings-form h2 { margin-bottom: 0; }
+.settings-form p:first-of-type { margin-top: 0.15rem; }
+
 .kv {
   display: grid;
   grid-template-columns: max-content 1fr;

@@ -17,6 +17,7 @@ export class ApiError extends Error {
     return {
       login_required: 'Please log in.',
       invalid_credentials: 'That email and password do not match.',
+      current_password_incorrect: 'That is not your current password.',
       email_taken: 'An account with that email already exists.',
       admin_only: 'That area is for admins only.',
       not_found: 'Not found.',
