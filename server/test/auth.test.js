@@ -160,3 +160,134 @@ describe('the session store', () => {
     assert.equal(rows.length, 1, 'session row exists in user_session');
   });
 });
+
+describe('changing the password', () => {
+  /** The raw sid, i.e. the user_session primary key, from a client's jar. */
+  function rawSid(client) {
+    const cookie = client.jar.get('sid');
+    return cookie ? decodeURIComponent(cookie).replace(/^s:/, '').split('.')[0] : null;
+  }
+
+  it('swaps the password: the old one stops working, the new one starts', async () => {
+    const { client, email } = await registerClient('pw-change');
+    const res = await client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'a-much-better-one',
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.user.email, email);
+    assert.ok(!('password_hash' in res.body.user));
+
+    const old = await makeClient().post('/auth/login', { email, password: 'password123' });
+    assert.equal(old.status, 401, 'the old password must be dead');
+
+    const fresh = makeClient();
+    assert.equal((await fresh.post('/auth/login', { email, password: 'a-much-better-one' })).status, 200);
+    assert.equal((await fresh.get('/auth/me')).status, 200);
+  });
+
+  it('stores a new bcrypt hash rather than the password', async () => {
+    const { client, email } = await registerClient('pw-hash');
+    const before = await pool.query('select password_hash from app_user where email = $1', [email]);
+    await client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'another-good-one',
+    });
+    const after = await pool.query('select password_hash from app_user where email = $1', [email]);
+
+    assert.match(after.rows[0].password_hash, /^\$2[aby]\$12\$/, 'bcrypt, cost 12');
+    assert.notEqual(after.rows[0].password_hash, before.rows[0].password_hash);
+    assert.notEqual(after.rows[0].password_hash, 'another-good-one');
+  });
+
+  it('refuses a wrong current password and leaves the old one working', async () => {
+    const { client, email } = await registerClient('pw-wrong');
+    const res = await client.patch('/auth/me/password', {
+      currentPassword: 'not-the-password', newPassword: 'a-much-better-one',
+    });
+    assert.equal(res.status, 401);
+    assert.equal(res.body.error, 'current_password_incorrect');
+
+    const still = await makeClient().post('/auth/login', { email, password: 'password123' });
+    assert.equal(still.status, 200, 'a failed change must not touch the password');
+  });
+
+  it('applies the registration policy to the new password', async () => {
+    const { client } = await registerClient('pw-policy');
+    const short = await client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'abc',
+    });
+    assert.equal(short.status, 400);
+    assert.equal(short.body.error, 'validation_failed');
+    assert.ok(short.body.fields.newPassword);
+
+    const same = await client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'password123',
+    });
+    assert.equal(same.status, 400, 'reusing the current password is not a change');
+    assert.ok(same.body.fields.newPassword);
+  });
+
+  it('does not apply the policy to the current password field', async () => {
+    // A short *wrong* current password is a rejected credential (401), not
+    // malformed input (400) -- same reasoning as login.
+    const { client } = await registerClient('pw-shortcurrent');
+    const res = await client.patch('/auth/me/password', {
+      currentPassword: 'no', newPassword: 'a-much-better-one',
+    });
+    assert.equal(res.status, 401);
+    assert.equal(res.body.error, 'current_password_incorrect');
+  });
+
+  it('needs a session', async () => {
+    const res = await makeClient().patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'a-much-better-one',
+    });
+    assert.equal(res.status, 401);
+    assert.equal(res.body.error, 'login_required');
+  });
+
+  it('rotates the caller session and keeps the caller logged in', async () => {
+    const { client } = await registerClient('pw-rotate');
+    const before = rawSid(client);
+    await client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'a-much-better-one',
+    });
+    const after = rawSid(client);
+
+    assert.notEqual(after, before, 'the caller gets a new session id');
+    assert.equal((await client.get('/auth/me')).status, 200, 'and stays logged in');
+
+    const { rows } = await pool.query('select sid from user_session where sid = $1', [before]);
+    assert.equal(rows.length, 0, 'the old session row is gone');
+  });
+
+  it('signs the user out of every other session', async () => {
+    const { client, email } = await registerClient('pw-others');
+
+    // A second and third browser for the same account.
+    const other = makeClient();
+    await other.post('/auth/login', { email, password: 'password123' });
+    const third = makeClient();
+    await third.post('/auth/login', { email, password: 'password123' });
+    assert.equal((await other.get('/auth/me')).status, 200);
+    assert.equal((await third.get('/auth/me')).status, 200);
+
+    await client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'a-much-better-one',
+    });
+
+    assert.equal((await other.get('/auth/me')).status, 401, 'other sessions are dead');
+    assert.equal((await third.get('/auth/me')).status, 401);
+    assert.equal((await client.get('/auth/me')).status, 200, 'the caller survives');
+  });
+
+  it('leaves other users signed in', async () => {
+    const mine = await registerClient('pw-mine');
+    const theirs = await registerClient('pw-theirs');
+
+    await mine.client.patch('/auth/me/password', {
+      currentPassword: 'password123', newPassword: 'a-much-better-one',
+    });
+
+    assert.equal((await theirs.client.get('/auth/me')).status, 200, 'not my session to end');
+  });
+});

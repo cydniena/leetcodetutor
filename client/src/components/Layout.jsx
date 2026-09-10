@@ -38,7 +38,7 @@ export default function Layout() {
           )}
         </nav>
         <div className="who">
-          <span className="muted small">{user?.email}</span>
+          <NavLink to="/settings" className="small">{user?.email}</NavLink>
           <button type="button" className="ghost" onClick={onLogout}>Log out</button>
         </div>
       </header>

@@ -129,10 +129,20 @@ Same algorithm at cost 12, roughly 3× slower to hash — irrelevant at login
 volumes of one. `argon2id` would be the better modern primitive if this ever had
 real users.
 
-**Password policy applies at registration only.** Login validates that a
-password is present, nothing more. Enforcing a minimum length at login would
-leak the policy through the status code and would lock out existing accounts the
-day the policy is tightened.
+**Password policy applies at registration and at a password change.** Both read
+one `PASSWORD_POLICY` object in `server/src/routes/auth.js`, so they cannot
+drift. Login validates that a password is present, nothing more, and neither
+does the `currentPassword` field of a change: enforcing a minimum length there
+would leak the policy through the status code and would lock out an account
+created before the policy was tightened.
+
+**A password change ends every other session.** `PATCH /api/auth/me/password`
+re-verifies the current password with bcrypt, then deletes this user's other
+rows from `user_session` and rotates the caller's own session id. Changing a
+password is what you do when you think someone else has it, so leaving their
+session alive would defeat the point. There is no reset-by-email yet — it needs
+a mailer and a single-use token table, and it is phase 8 along with account
+deletion.
 
 **`qs` override.** Express 4.22.2 pins a `qs` version with a moderate DoS
 advisory; `server/package.json` overrides it to `^6.16.0`, which is
@@ -143,13 +153,14 @@ API-compatible. Both `npm audit`s report zero vulnerabilities.
 | # | Slice | Status |
 |---|-------|--------|
 | 0 | Skeleton, Docker Postgres, migration runner, catalog + seed | **done** |
-| 1 | Auth: register / login / logout / me, roles, ownership tests | **done** |
+| 1 | Auth: register / login / logout / me, password change, roles, ownership tests | **done** |
 | 2 | Catalog read, problem browser, hint reveal, notes CRUD | next |
 | 3 | Attempts CRUD, logging form, history | |
 | 4 | Plans and plan items, reorder, reschedule | |
 | 5 | Goals, reviews (1/3/7/21 ladder), today's queue, dashboard | |
 | 6 | Analytics — the six queries | |
 | 7 | Admin catalog CRUD | |
+| 8 | Account recovery: password reset by email (mailer, single-use tokens) and account deletion | |
 
 The nav bar shows a small number next to routes that aren't built yet, so the app
 never pretends to have a page it doesn't have.
