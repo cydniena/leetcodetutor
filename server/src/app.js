@@ -11,6 +11,19 @@ import authRoutes from './routes/auth.js';
 
 const PgStore = connectPgSimple(session);
 
+// body-parser error types we can actually reach, mapped to this API's
+// snake_case error vocabulary. Anything else 4xx becomes 'bad_request'.
+const CLIENT_ERROR_CODES = {
+  'entity.parse.failed': 'malformed_json',
+  'entity.too.large': 'payload_too_large',
+  'entity.verify.failed': 'malformed_json',
+  'request.aborted': 'request_aborted',
+  'request.size.invalid': 'bad_content_length',
+  'parameters.too.many': 'too_many_parameters',
+  'charset.unsupported': 'unsupported_charset',
+  'encoding.unsupported': 'unsupported_encoding',
+};
+
 export function createApp() {
   const app = express();
   const isProd = process.env.NODE_ENV === 'production';
@@ -71,6 +84,20 @@ export function createApp() {
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: err.code, ...(err.extra || {}) });
     }
+
+    // express.json() and friends reject a bad request by throwing an error that
+    // already carries its own 4xx status: a body that is not valid JSON, or one
+    // over the 64kb limit. Those are the caller's mistake, so they must keep
+    // that status. Answering 500 tells the caller to retry something that can
+    // never succeed, and logging it as a server fault buries the real ones.
+    //
+    // The code comes from err.type, never err.message: body-parser sets
+    // `expose: true` and puts a slice of the offending body in the message.
+    const status = err.status ?? err.statusCode;
+    if (Number.isInteger(status) && status >= 400 && status < 500) {
+      return res.status(status).json({ error: CLIENT_ERROR_CODES[err.type] || 'bad_request' });
+    }
+
     console.error(err);
     res.status(500).json({ error: 'internal_error' });
   });
