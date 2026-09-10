@@ -113,7 +113,9 @@ export async function retentionByGap(db, userId) {
 export async function planAdherence(db, userId) {
   const { rows } = await db.query(
     `select pl.id as plan_id, pl.name, pl.status as plan_status,
-            count(*) as items,
+            -- count(pi.id), not count(*): the LEFT JOIN gives a plan with no
+            -- items one all-null row, which count(*) would report as 1 item.
+            count(pi.id) as items,
             count(*) filter (where pi.status = 'done') as done,
             count(*) filter (
               where pi.status = 'done'
